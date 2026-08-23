@@ -2,19 +2,80 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createWorker } from 'tesseract.js';
 
-// Regex Helpers for Extraction
-function extractPanFields(text: string) {
-  // Convert to uppercase and strip whitespace to ensure robust PAN match
-  const cleanTextUpper = text.toUpperCase().replace(/\s/g, '');
-  const panMatch = cleanTextUpper.match(/[A-Z]{5}[0-9]{4}[A-Z]{1}/);
-  const panNumber = panMatch ? panMatch[0] : null;
+// Cognitive OCR Helper Utilities for common character confusions
+function correctOcrPan(candidate: string): string {
+  const s = candidate.toUpperCase();
+  if (s.length < 9) return s;
+  
+  const toChar = (c: string) => {
+    const map: Record<string, string> = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B' };
+    return map[c] || c;
+  };
+  
+  const toDigit = (c: string) => {
+    const map: Record<string, string> = { 'O': '0', 'D': '0', 'Q': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8' };
+    return map[c] || c;
+  };
 
-  let fullName = null;
+  let corrected = '';
+  // First 5 characters must be letters
+  for (let i = 0; i < 5; i++) {
+    corrected += toChar(s[i]);
+  }
+  // Next 4 characters must be digits
+  for (let i = 5; i < 9; i++) {
+    corrected += toDigit(s[i]);
+  }
+  // Last character (if present) must be a letter
+  if (s.length >= 10) {
+    corrected += toChar(s[9]);
+  }
+  
+  return corrected;
+}
+
+function correctOcrAadhaar(candidate: string): string {
+  const map: Record<string, string> = {
+    'O': '0', 'D': '0', 'Q': '0',
+    'I': '1', 'L': '1', '|': '1',
+    'Z': '2', 'S': '5', 'B': '8'
+  };
+  let corrected = '';
+  for (let i = 0; i < candidate.length; i++) {
+    const c = candidate[i].toUpperCase();
+    corrected += map[c] || c;
+  }
+  return corrected;
+}
+
+function cleanPersonName(rawName: string): string {
+  if (!rawName) return '';
+  const clean = rawName.replace(/[^A-Za-z\s]/g, ' ').trim();
+  const words = clean.split(/\s+/).filter(w => w.length >= 2);
+  const noiseWords = ['govt', 'government', 'india', 'income', 'tax', 'department', 'card', 'permanent', 'account', 'number', 'signature', 'father', 'birth', 'date', 'male', 'female', 'gender', 'unique', 'authority', 'identification'];
+  const filtered = words.filter(w => !noiseWords.includes(w.toLowerCase()));
+  return filtered.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function extractPanFields(text: string) {
+  let panNumber = null;
   const lines = text.split('\n')
     .map(line => line.trim())
     .filter(line => line.length > 0);
 
-  // Search for name label first (allow non-English script prefixes like "नाम/ Name")
+  // Scan line-by-line for a PAN candidate on the original upper-cased line
+  for (const line of lines) {
+    const cleanLine = line.toUpperCase();
+    const panMatch = cleanLine.match(/[A-Z0-9]{5}[0-9A-Z]{4}[A-Z0-9]?/);
+    if (panMatch) {
+      panNumber = correctOcrPan(panMatch[0]);
+      break;
+    }
+  }
+
+  let fullName = null;
+
+  // Search for name label first
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/(name|full\s*name)/i.test(line) && !/father/i.test(line)) {
@@ -22,37 +83,44 @@ function extractPanFields(text: string) {
         .replace(/[^A-Za-z\s\.]/g, '')
         .trim();
       if (cleanVal.length > 2) {
-        fullName = cleanVal;
+        fullName = cleanPersonName(cleanVal);
         break;
       }
       if (i + 1 < lines.length) {
         const nextClean = lines[i + 1].replace(/[^A-Za-z\s\.]/g, '').trim();
         if (nextClean.length > 2 && !/father/i.test(nextClean)) {
-          fullName = nextClean;
+          fullName = cleanPersonName(nextClean);
           break;
         }
       }
     }
   }
 
-  // Fallback: first English all-uppercase line that has >= 2 words
+  // Fallback: search for uppercase blocks on each line
   if (!fullName) {
     const noiseKeywords = ['govt', 'government', 'india', 'income', 'tax', 'department', 'card', 'permanent', 'account', 'number', 'signature', 'father'];
     for (const line of lines) {
-      const cleanCandidate = line.replace(/[^A-Za-z\s]/g, '').trim();
-      const words = cleanCandidate.split(/\s+/).filter(w => w.length >= 2);
-      if (words.length >= 2 && cleanCandidate.length >= 4 && cleanCandidate.length <= 40) {
-        const upper = cleanCandidate.toUpperCase();
-        if (upper === cleanCandidate && !noiseKeywords.some(keyword => upper.includes(keyword.toUpperCase()))) {
-          fullName = cleanCandidate;
-          break;
+      if (noiseKeywords.some(keyword => line.toLowerCase().includes(keyword))) continue;
+      
+      const words = line.split(/\s+/);
+      const upperWords = [];
+      for (const w of words) {
+        const cleanW = w.replace(/[^A-Za-z]/g, '');
+        if (cleanW && cleanW.toUpperCase() === cleanW && cleanW.length >= 2) {
+          upperWords.push(cleanW);
+        } else {
+          if (upperWords.length >= 2) break;
         }
+      }
+      if (upperWords.length >= 2) {
+        fullName = cleanPersonName(upperWords.join(' '));
+        break;
       }
     }
   }
 
-  const panConfidence = panNumber ? 'high' : 'not_found';
-  const nameConfidence = fullName ? (fullName.length > 3 ? 'high' : 'low') : 'not_found';
+  const panConfidence = panNumber && panNumber.length === 10 ? 'high' : (panNumber ? 'low' : 'not_found');
+  const nameConfidence = fullName ? 'high' : 'not_found';
 
   return {
     fields: { panNumber, fullName },
@@ -61,19 +129,26 @@ function extractPanFields(text: string) {
 }
 
 function extractAadhaarFields(text: string) {
-  const cleanDigits = text.replace(/[\s\-]/g, '');
-  const aadhaarMatch = cleanDigits.match(/[0-9]{12}/);
-  const rawAadhaar = aadhaarMatch ? aadhaarMatch[0] : null;
-
+  let rawAadhaar = null;
   let maskedAadhaar = null;
-  if (rawAadhaar) {
-    maskedAadhaar = `XXXX XXXX ${rawAadhaar.slice(-4)}`;
-  }
-
-  let fullName = null;
   const lines = text.split('\n')
     .map(line => line.trim())
     .filter(line => line.length > 0);
+
+  for (const line of lines) {
+    const cleanLine = line.replace(/[^0-9A-Z|]/ig, '');
+    const aadhaarMatch = cleanLine.match(/[0-9A-Z|]{12}/i);
+    if (aadhaarMatch) {
+      const corrected = correctOcrAadhaar(aadhaarMatch[0]);
+      if (/^\d{12}$/.test(corrected)) {
+        rawAadhaar = corrected;
+        maskedAadhaar = `XXXX XXXX ${rawAadhaar.slice(-4)}`;
+        break;
+      }
+    }
+  }
+
+  let fullName = null;
 
   // 1. Search for Name label
   for (let i = 0; i < lines.length; i++) {
@@ -83,13 +158,13 @@ function extractAadhaarFields(text: string) {
         .replace(/[^A-Za-z\s\.]/g, '')
         .trim();
       if (cleanVal.length > 2) {
-        fullName = cleanVal;
+        fullName = cleanPersonName(cleanVal);
         break;
       }
       if (i + 1 < lines.length) {
         const nextClean = lines[i + 1].replace(/[^A-Za-z\s\.]/g, '').trim();
         if (nextClean.length > 2) {
-          fullName = nextClean;
+          fullName = cleanPersonName(nextClean);
           break;
         }
       }
@@ -104,12 +179,11 @@ function extractAadhaarFields(text: string) {
         for (let j = 1; j <= 3; j++) {
           if (i - j >= 0) {
             const candidate = lines[i - j];
-            // Remove everything except English letters and spaces
             const cleanCandidate = candidate.replace(/[^A-Za-z\s\.]/g, '').trim();
             const words = cleanCandidate.split(/\s+/).filter(w => w.length >= 2);
             if (words.length >= 2 && cleanCandidate.length >= 4 && cleanCandidate.length <= 35) {
               if (!/govt|government|india|unique|authority|identification/i.test(cleanCandidate)) {
-                fullName = cleanCandidate;
+                fullName = cleanPersonName(cleanCandidate);
                 break;
               }
             }
@@ -130,7 +204,7 @@ function extractAadhaarFields(text: string) {
           const cleanCandidate = candidate.replace(/[^A-Za-z\s\.]/g, '').trim();
           const words = cleanCandidate.split(/\s+/).filter(w => w.length >= 2);
           if (words.length >= 2 && cleanCandidate.length >= 4 && cleanCandidate.length <= 35) {
-            fullName = cleanCandidate;
+            fullName = cleanPersonName(cleanCandidate);
             break;
           }
         }
@@ -139,7 +213,7 @@ function extractAadhaarFields(text: string) {
   }
 
   const aadhaarConfidence = maskedAadhaar ? 'high' : 'not_found';
-  const nameConfidence = fullName ? (fullName.length > 3 ? 'high' : 'low') : 'not_found';
+  const nameConfidence = fullName ? 'high' : 'not_found';
 
   return {
     fields: { aadhaarNumber: maskedAadhaar, fullName },
@@ -341,6 +415,9 @@ export async function POST(request: NextRequest) {
     if (!extractedText.trim()) {
       try {
         const worker = await createWorker('eng', 1, { cachePath: '/tmp' });
+        await worker.setParameters({
+          tessedit_pageseg_mode: '3' as any
+        });
         const { data: { text } } = await worker.recognize(buffer);
         await worker.terminate();
         extractedText = text;
