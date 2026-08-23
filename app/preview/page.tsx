@@ -13,6 +13,64 @@ interface ChecklistItem {
   source: 'extractable' | 'manual_only';
 }
 
+// Auto-Correction Helpers for Character Confusions
+function sanitizePan(val: string): string {
+  const s = val.trim().toUpperCase();
+  if (s.length !== 10) return val;
+  
+  const toChar = (c: string) => {
+    const map: Record<string, string> = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B' };
+    return map[c] || c;
+  };
+  
+  const toDigit = (c: string) => {
+    const map: Record<string, string> = { 'O': '0', 'D': '0', 'Q': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8' };
+    return map[c] || c;
+  };
+
+  let corrected = '';
+  for (let i = 0; i < 5; i++) corrected += toChar(s[i]);
+  for (let i = 5; i < 9; i++) corrected += toDigit(s[i]);
+  corrected += toChar(s[9]);
+  return corrected;
+}
+
+function sanitizeAadhaar(val: string): string {
+  const s = val.trim();
+  if (s.toUpperCase().startsWith('XXXX')) return val;
+  
+  const clean = s.replace(/[^0-9A-Z|]/ig, '');
+  if (clean.length !== 12) return val;
+
+  const map: Record<string, string> = {
+    'O': '0', 'D': '0', 'Q': '0',
+    'I': '1', 'L': '1', '|': '1',
+    'Z': '2', 'S': '5', 'B': '8'
+  };
+  let corrected = '';
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i].toUpperCase();
+    corrected += map[c] || c;
+  }
+  return corrected;
+}
+
+function sanitizeIfsc(val: string): string {
+  const s = val.trim().toUpperCase();
+  if (s.length !== 11) return val;
+  
+  const toChar = (c: string) => {
+    const map: Record<string, string> = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B' };
+    return map[c] || c;
+  };
+
+  let corrected = '';
+  for (let i = 0; i < 4; i++) corrected += toChar(s[i]);
+  corrected += '0';
+  corrected += s.slice(5);
+  return corrected;
+}
+
 function PreviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -116,7 +174,23 @@ function PreviewContent() {
   };
 
   const handleFieldBlur = async (field: string, val: string) => {
-    const err = validateField(field, val, items);
+    let sanitizedVal = val;
+    if (field === 'panNumber' || field === 'panOfBusiness') {
+      sanitizedVal = sanitizePan(val);
+    } else if (field === 'aadhaarNumber') {
+      sanitizedVal = sanitizeAadhaar(val);
+    } else if (field === 'ifscCode') {
+      sanitizedVal = sanitizeIfsc(val);
+    }
+
+    if (sanitizedVal !== val) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: sanitizedVal
+      }));
+    }
+
+    const err = validateField(field, sanitizedVal, items);
     setValidationErrors(prev => ({
       ...prev,
       [field]: err
@@ -126,7 +200,7 @@ function PreviewContent() {
       const res = await fetch('/api/manual-entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, field, value: val })
+        body: JSON.stringify({ sessionId, field, value: sanitizedVal })
       });
       if (!res.ok) {
         throw new Error('Failed to update form field.');
