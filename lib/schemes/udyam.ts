@@ -64,9 +64,10 @@ export const udyamScheme: SchemeConfig = {
       source: 'extractable',
       validate: (val) => {
         if (!val || !val.trim()) return 'This field is required.';
-        const clean = val.replace(/\s/g, '');
-        if (clean.length < 12) {
-          return 'Aadhaar must be at least 12 characters.';
+        const cleanAadhaar = val.replace(/\s/g, '').toUpperCase();
+        const aadhaarRegex = /^(\d{12}|X{8}\d{4})$/;
+        if (!aadhaarRegex.test(cleanAadhaar)) {
+          return 'Aadhaar must be exactly 12 digits (e.g., 123456789012) or in masked format (e.g., XXXX XXXX 1234).';
         }
         return null;
       }
@@ -78,8 +79,8 @@ export const udyamScheme: SchemeConfig = {
       validate: (val) => {
         if (!val || !val.trim()) return 'This field is required.';
         const clean = val.replace(/\s/g, '');
-        if (clean.length < 10) {
-          return 'Mobile number must be at least 10 digits.';
+        if (!/^\d{10}$/.test(clean)) {
+          return 'Mobile number must be exactly 10 digits.';
         }
         return null;
       }
@@ -90,8 +91,9 @@ export const udyamScheme: SchemeConfig = {
       source: 'extractable',
       validate: (val) => {
         if (!val || !val.trim()) return 'This field is required.';
-        if (val.trim().length < 10) {
-          return 'PAN should be at least 10 characters.';
+        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
+        if (!panRegex.test(val.trim())) {
+          return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
         }
         return null;
       }
@@ -118,8 +120,9 @@ export const udyamScheme: SchemeConfig = {
         const isNa = type.toLowerCase().includes('proprietorship') || type.toLowerCase().includes('individual') || type === 'Proprietorship';
         if (isNa) return null;
         if (!val || !val.trim()) return 'This field is required.';
-        if (val.trim().length < 10) {
-          return 'PAN should be at least 10 characters.';
+        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
+        if (!panRegex.test(val.trim())) {
+          return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
         }
         return null;
       }
@@ -134,8 +137,9 @@ export const udyamScheme: SchemeConfig = {
       validate: (val, settings) => {
         if (settings.gstRegistered === 'no') return null;
         if (!val || !val.trim()) return 'This field is required.';
-        if (val.trim().length < 15) {
-          return 'GSTIN must be at least 15 characters.';
+        const gstinRegex = /^[0-9OQDILZSB]{2}[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$/i;
+        if (!gstinRegex.test(val.trim())) {
+          return 'GSTIN must match the 15-character format (2 digits state code + 10-character PAN + 1 entity code + 1 default "Z" + 1 checksum).';
         }
         return null;
       }
@@ -173,10 +177,12 @@ export const udyamScheme: SchemeConfig = {
       source: 'extractable',
       validate: (val, settings) => {
         const bankAcc = (settings.bankAccountNumber || '').trim();
+        // Only validate if bank details were provided
         if (!val && !bankAcc) return null;
         if (!val || !val.trim()) return 'This field is required.';
-        if (val.trim().length < 11) {
-          return 'IFSC should be at least 11 characters.';
+        const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+        if (!ifscRegex.test(val.trim())) {
+          return 'IFSC should be 11 characters: 4 letters, "0", and 6 alphanumeric characters (e.g., SBIN0001029).';
         }
         return null;
       }
