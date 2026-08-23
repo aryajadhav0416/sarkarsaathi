@@ -87,16 +87,9 @@ export const udyamScheme: SchemeConfig = {
     },
     {
       field: 'panNumber',
-      required: true,
+      required: false,
       source: 'extractable',
-      validate: (val) => {
-        if (!val || !val.trim()) return 'This field is required.';
-        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
-        if (!panRegex.test(val.trim())) {
-          return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
-        }
-        return null;
-      }
+      validate: () => null
     },
     {
       field: 'name',
@@ -109,23 +102,13 @@ export const udyamScheme: SchemeConfig = {
     },
     {
       field: 'panOfBusiness',
-      required: true, // evaluated dynamically based on applicability
+      required: false, // evaluated dynamically based on applicability
       source: 'extractable',
       isApplicable: (settings) => {
         const type = settings.businessType || '';
         return !(type.toLowerCase().includes('proprietorship') || type.toLowerCase().includes('individual') || type === 'Proprietorship');
       },
-      validate: (val, settings) => {
-        const type = settings.businessType || '';
-        const isNa = type.toLowerCase().includes('proprietorship') || type.toLowerCase().includes('individual') || type === 'Proprietorship';
-        if (isNa) return null;
-        if (!val || !val.trim()) return 'This field is required.';
-        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
-        if (!panRegex.test(val.trim())) {
-          return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
-        }
-        return null;
-      }
+      validate: () => null
     },
     {
       field: 'gstin',
