@@ -91,7 +91,7 @@ export const udyamScheme: SchemeConfig = {
       source: 'extractable',
       validate: (val) => {
         if (!val || !val.trim()) return 'This field is required.';
-        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/i;
+        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
         if (!panRegex.test(val.trim())) {
           return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
         }
@@ -120,7 +120,7 @@ export const udyamScheme: SchemeConfig = {
         const isNa = type.toLowerCase().includes('proprietorship') || type.toLowerCase().includes('individual') || type === 'Proprietorship';
         if (isNa) return null;
         if (!val || !val.trim()) return 'This field is required.';
-        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/i;
+        const panRegex = /^[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]$/i;
         if (!panRegex.test(val.trim())) {
           return 'PAN should be 10 characters: 5 letters, 4 numbers, 1 letter (e.g., ABCDE1234F).';
         }
@@ -137,7 +137,7 @@ export const udyamScheme: SchemeConfig = {
       validate: (val, settings) => {
         if (settings.gstRegistered === 'no') return null;
         if (!val || !val.trim()) return 'This field is required.';
-        const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$/i;
+        const gstinRegex = /^[0-9OQDILZSB]{2}[A-Z]{5}[0-9OQDILZSB]{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$/i;
         if (!gstinRegex.test(val.trim())) {
           return 'GSTIN must match the 15-character format (2 digits state code + 10-character PAN + 1 entity code + 1 default "Z" + 1 checksum).';
         }

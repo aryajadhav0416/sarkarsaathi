@@ -71,6 +71,35 @@ function sanitizeIfsc(val: string): string {
   return corrected;
 }
 
+function sanitizeGstin(val: string): string {
+  const s = val.trim().toUpperCase();
+  if (s.length !== 15) return val;
+
+  const toChar = (c: string) => {
+    const map: Record<string, string> = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B' };
+    return map[c] || c;
+  };
+  
+  const toDigit = (c: string) => {
+    const map: Record<string, string> = { 'O': '0', 'D': '0', 'Q': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8' };
+    return map[c] || c;
+  };
+
+  let corrected = '';
+  // 1. First 2 characters are digits (state code)
+  for (let i = 0; i < 2; i++) corrected += toDigit(s[i]);
+  // 2. Next 5 characters are letters (PAN prefix)
+  for (let i = 2; i < 7; i++) corrected += toChar(s[i]);
+  // 3. Next 4 characters are digits (PAN number)
+  for (let i = 7; i < 11; i++) corrected += toDigit(s[i]);
+  // 4. Next 1 character is a letter (PAN suffix)
+  corrected += toChar(s[11]);
+  // 5. Remaining 3 characters
+  corrected += s.slice(12);
+  
+  return corrected;
+}
+
 function PreviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -181,6 +210,8 @@ function PreviewContent() {
       sanitizedVal = sanitizeAadhaar(val);
     } else if (field === 'ifscCode') {
       sanitizedVal = sanitizeIfsc(val);
+    } else if (field === 'gstin') {
+      sanitizedVal = sanitizeGstin(val);
     }
 
     if (sanitizedVal !== val) {
