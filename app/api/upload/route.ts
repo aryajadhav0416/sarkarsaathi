@@ -340,7 +340,7 @@ export async function POST(request: NextRequest) {
     // Run Tesseract OCR for images (or if PDF text extraction returned nothing)
     if (!extractedText.trim()) {
       try {
-        const worker = await createWorker('eng');
+        const worker = await createWorker('eng', 1, { cachePath: '/tmp' });
         const { data: { text } } = await worker.recognize(buffer);
         await worker.terminate();
         extractedText = text;

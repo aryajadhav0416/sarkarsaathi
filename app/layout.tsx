@@ -23,15 +23,6 @@ export default function RootLayout({
               <span style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-surface-elevated)', padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--border)' }}>
                 Currently supporting: Udyam Registration
               </span>
-              <nav>
-                <ul className="nav-links">
-                  <li>
-                    <a href="/api/health" className="nav-link" id="nav-health-check">
-                      API Health
-                    </a>
-                  </li>
-                </ul>
-              </nav>
             </div>
           </div>
         </header>
